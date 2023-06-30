@@ -292,6 +292,7 @@ def eligible_history(history, default_for_null=True):
   notifications = db_session.query(HistoryNotification).filter_by(h_id=history['id'], h_date=history['update_time']).all()
 
   if len(notifications) == 0:
+    db_session.close()
     return default_for_null
 
   for n in notifications:
@@ -302,7 +303,7 @@ def eligible_history(history, default_for_null=True):
         ret = False
       if notification.type == "Deletion": #always skip histories that have been notified as being deleted previously.
         print(f"ERROR: History {history['id']} already notified regarding deletion, but is presented for processing. Check past logs/db for details. Manual deletion required. Skipping.")
-        return False
+        ret = False
 
   db_session.close()
   return ret
@@ -739,20 +740,21 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
         num_deleted += 1
         if deletion_notification.sent < warn_threshold:
           history = db_session.query(History).filter_by(id=history_notification.h_id).first()
-          if history.status != "Purged":
-            num_threshold += 1
-            rem_result = remove_history(history.id, purge=True)
-            if rem_result:
-              num_purged += 1
-              hist_size += history.size
-              history.status = "Purged"
-              db_session.add(history)
-              db_session.commit()
+          if history:
+            if history.status != "Purged":
+              num_threshold += 1
+              rem_result = remove_history(history.id, purge=True)
+              if rem_result:
+                num_purged += 1
+                hist_size += history.size
+                history.status = "Purged"
+                db_session.add(history)
+                db_session.commit()
+              else:
+                num_error += 1
+                print(f"Unable to purge history: {history.id}")
             else:
-              num_error += 1
-              print(f"Unable to purge history: {history.id}")
-          else:
-            num_previous += 1
+              num_previous += 1
 
     db_session.close()
     msgs.append(f"Deleted histories: {num_deleted}")
