@@ -1,0 +1,6 @@
+requests
+python-dateutil
+slackclient
+sqlalchemy
+Jinja2
+alembic

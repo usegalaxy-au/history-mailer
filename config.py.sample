@@ -1,0 +1,37 @@
+HISTORIES_WARN_DAYS=365
+HISTORIES_DELETE_DAYS=385
+EMAIL_DAYS_THRESHOLD=6
+PURGE_DAYS_THRESHOLD=6
+
+STAGING_GALAXY_API_KEY=""
+STAGING_GALAXY_BASEURL=""  # "https://my-test-galaxy-url.org/api/"
+STAGING_HIST_VIEW_BASE=""  # "https://my-test-galaxy-url.org/histories/view?id="
+PROD_GALAXY_API_KEY=""
+PROD_GALAXY_BASEURL=""  # "https://my-galaxy-url.org/api/"
+PROD_HIST_VIEW_BASE=""  # "https://my-galaxy-url.org/histories/view?id="
+
+STAGING_LOCAL_DB='sqlite:///staging_hm.sqlite'
+PROD_LOCAL_DB='sqlite:///prod_hm.sqlite'
+
+GALAXY_HISTORIES_EP="histories"
+GALAXY_USER_EP="users"
+GALAXY_DEFAULT_KEYS="id,name,user_id,update_time,size"
+GALAXY_GROUP_EP="groups/"
+GALAXY_GROUP_USER_EP="/users"
+GALAXY_WHITELIST_GROUP="History Retention Whitelist"
+
+# Postal settings
+MAIL_API=""
+MAIL_FROM=""  # "Galaxy <no-reply@my-galaxy-url>"
+MAIL_REPLYTO=""
+MAIL_BASEURL=""  # "https://postalserver.my-galaxy-url/api/v1/"
+MAIL_SENDMESSAGE="send/message"
+MAIL_SUBJECT_WARNING="Galaxy: Upcoming Deletion Notification"
+MAIL_SUBJECT_DELETION="Galaxy: Deletion Notification"
+
+# Slack settings
+SLACK_TOKEN=""
+SLACK_ALERT_CHANNEL=""
+SLACK_LOG_CHANNEL=""
+SLACK_ALERT_MENTIONS=""
+SLACK_LOG_MENTIONS=""
