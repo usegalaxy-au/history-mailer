@@ -1,9 +1,14 @@
-from logging.config import fileConfig
+import os
+import sys
 
+from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+sys.path = ['..'] + sys.path[1:]
+import models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -17,13 +22,17 @@ fileConfig(config.config_file_name)
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = None
+target_metadata = models.Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+# allow db filename to come from env var to support multiple dbs (staging, prod)
+default_db_filename = 'prod_hm.sqlite'
+section = config.config_ini_section
+config.set_section_option(section, "HISTORY_MAILER_DB", os.environ.get("HISTORY_MAILER_DB"))
 
 def run_migrations_offline():
     """Run migrations in 'offline' mode.

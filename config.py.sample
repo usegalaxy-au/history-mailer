@@ -18,7 +18,7 @@ GALAXY_USER_EP="users"
 GALAXY_DEFAULT_KEYS="id,name,user_id,update_time,size"
 GALAXY_GROUP_EP="groups/"
 GALAXY_GROUP_USER_EP="/users"
-GALAXY_WHITELIST_GROUP="History Retention Whitelist"
+GALAXY_KEEPLIST_GROUP="History Retention Keeplist"
 
 # Postal settings
 MAIL_API=""
