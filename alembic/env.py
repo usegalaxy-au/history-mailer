@@ -7,7 +7,7 @@ from sqlalchemy import pool
 
 from alembic import context
 
-sys.path = ['..'] + sys.path[1:]
+sys.path = ['', '..'] + sys.path[1:]
 import models
 
 # this is the Alembic Config object, which provides
