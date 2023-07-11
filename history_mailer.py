@@ -784,8 +784,9 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
 
 if __name__ == "__main__":
   args = argparser.parse_args()
-
-  if args.dryrun or args.warn or args.delete or args.drop_db or args.purge:
+  if not args.production and not config.STAGING_GALAXY_BASEURL:
+    print("No staging URL set. Run with --production flag to use production configuration.")
+  elif args.dryrun or args.warn or args.delete or args.drop_db or args.purge:
     main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge)
   else:
     print("No run type selected. Quiting without any work. Run with '--help' for usage.")
