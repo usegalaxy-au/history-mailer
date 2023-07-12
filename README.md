@@ -22,6 +22,10 @@ optional arguments:
   --purge       Purges previously deleted histories.
 ```
 
+#### Configuration
+
+Copy `config.py.sample` to `config.py` and update values.
+
 #### Setting up local database files
 Setting up a local production database:
 
