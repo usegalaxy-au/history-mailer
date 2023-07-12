@@ -1,6 +1,6 @@
 ## history-mailer
 
-The history mailer is a python script to manage histories on a Galaxy instance. It interacts with a Postal API and a Galaxy API using admin privileges to detect unused histories, alert users on unused histories and delete these if the user does not update their histories. The history mailer maintains a local database to keep track of email notifications sent to users.
+The history mailer is a python script to manage histories on a [Galaxy](https://github.com/galaxyproject/galaxy) instance. It interacts with the Galaxy API and a [Postal](https://github.com/postalserver/postal) API using admin privileges to detect unused histories, alert users on unused histories and delete these if the user does not update their histories. The history mailer maintains a local database to keep track of email notifications sent to users.
 
 The script was designed and written by Simon Gladman @slugger70 and Thom Cuddihy @thomcuddihy.
 
@@ -24,7 +24,7 @@ optional arguments:
 
 #### Configuration
 
-Copy `config.py.sample` to `config.py` and update values.
+Copy `config.py.sample` to `config.py` and update values. By default, history_mailer.py users config values of a test (staging) server but can run without these values set, if the `--production` flag is used.
 
 #### Setting up local database files
 Setting up a local production database:
