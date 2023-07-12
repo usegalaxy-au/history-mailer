@@ -28,6 +28,8 @@ MAIL_BASEURL=""  # "https://postalserver.my-galaxy-url/api/v1/"
 MAIL_SENDMESSAGE="send/message"
 MAIL_SUBJECT_WARNING="Galaxy: Upcoming Deletion Notification"
 MAIL_SUBJECT_DELETION="Galaxy: Deletion Notification"
+MAIL_TEMPLATE_WARNING="templates/email_warning.html"
+MAIL_TEMPLATE_DELETION="templates/email_deletion.html"
 
 # Slack settings
 SLACK_TOKEN=""

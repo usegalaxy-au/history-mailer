@@ -416,8 +416,9 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
     # skip sending code if dryrun
     if dryrun:
       continue
-
-    template = Template(open('templates/email_warning.html').read())
+    
+    template_file = config.MAIL_TEMPLATE_WARNING
+    template = Template(open(template_file).read())
     html = template.render(username = username, histories = histories, warn_weeks = warn_weeks, delete_weeks = delete_weeks, warn_period = str(config.EMAIL_DAYS_THRESHOLD), hist_view_base = GALAXY_HIST_VIEW_BASE)
 
     notification = Notification()
@@ -574,7 +575,8 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
       if dryrun:
         continue
 
-      template = Template(open('templates/email_deletion.html').read())
+      template_file = config.MAIL_TEMPLATE_DELETION
+      template = Template(open(template_file).read())
       html = template.render(username = username, histories = histories, delete_weeks = delete_weeks, hist_view_base = GALAXY_HIST_VIEW_BASE)
 
       notification = Notification()
