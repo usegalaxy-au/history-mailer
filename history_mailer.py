@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 from jinja2 import Template
 from models import Base, History, User, Notification, Message, HistoryNotification
-from sqlalchemy import create_engine, not_
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 Session = None
