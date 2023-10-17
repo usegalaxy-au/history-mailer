@@ -724,6 +724,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
     num_purged = 0
     num_error = 0
     hist_size = 0
+    num_restored = 0
     db_session = Session()
 
     print("Beginning purge of previously deleted histories")
@@ -748,9 +749,11 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
               history.status = "Restored"
               db_session.add(history)
               db_session.commit()
+              num_restored += 1
               continue
 
             if history.status == "Restored":
+              num_restored += 1
               continue
 
             if history.status != "Purged":
@@ -772,6 +775,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
     msgs.append(f"Deleted histories: {num_deleted}")
     msgs.append(f"Previously purged histories: {num_previous}")
     msgs.append(f"Eligible histories: {num_threshold}")
+    msgs.append(f"Restored histories: {num_restored}")
     msgs.append(f"Purged histories: {num_purged}")
     msgs.append(f"Purged storage: {sizeof_fmt(hist_size)}")
     msgs.append(f"Errors: {num_error}")
