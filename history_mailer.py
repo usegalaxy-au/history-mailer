@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 from jinja2 import Template
 from models import Base, History, User, Notification, Message, HistoryNotification
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, not_
 from sqlalchemy.orm import sessionmaker
 
 Session = None
@@ -743,6 +743,16 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
         if deletion_notification.sent < warn_threshold:
           history = db_session.query(History).filter_by(id=history_notification.h_id).first()
           if history:
+            if not is_history_deleted(history):
+              # User has restored history
+              history.status = "Restored"
+              db_session.add(history)
+              db_session.commit()
+              continue
+
+            if history.status == "Restored":
+              continue
+
             if history.status != "Purged":
               num_threshold += 1
               rem_result = remove_history(history.id, purge=True)
@@ -783,6 +793,19 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
     if notify:
       notify_slack("Error - Galaxy Histroy Mailer", msg, 'danger')
     return None
+
+
+def is_history_deleted(history):
+  """Check live status to see if history status is deleted."""
+  url = (
+    GALAXY_BASEURL
+    + config.GALAXY_HISTORIES_EP
+    + '/' + history.hid
+    + f'/?key={GALAXY_API_KEY}'
+  )
+  data = session.get(url).json()
+  return data['deleted']
+
 
 if __name__ == "__main__":
   args = argparser.parse_args()
