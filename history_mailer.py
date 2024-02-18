@@ -744,25 +744,26 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
         if deletion_notification.sent < warn_threshold:
           history = db_session.query(History).filter_by(id=history_notification.h_id).first()
           if history:
-            try:
-              history_is_deleted = is_history_deleted(history)
-            except:
+            history_is_deleted, history_is_purged = is_history_deleted_or_purged(history)
+            if history_is_deleted is None:
               print(f"Error querying /api/<history_id> for history {history.id}. No action taken")
               num_error += 1
-              history_is_deleted = None
               continue
 
-            if not history_is_deleted:
+            if history_is_deleted is False:
               # User has restored history
               history.status = "Restored"
               db_session.add(history)
               db_session.commit()
               num_restored += 1
 
-            if history.status == "Restored":
-              num_restored += 1
-
             elif history.status != "Purged":
+              if history_is_purged:
+                history.status = "Purged"
+                db_session.add(history)
+                db_session.commit()
+                num_previous += 1
+                continue
               num_threshold += 1
               rem_result = remove_history(history.id, purge=True)
               if rem_result:
@@ -805,7 +806,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
     return None
 
 
-def is_history_deleted(history):
+def is_history_deleted_or_purged(history):
   """Check live status to see if history status is deleted."""
   url = (
     GALAXY_BASEURL
@@ -813,8 +814,12 @@ def is_history_deleted(history):
     + '/' + history.id  # history_table is indexed by field hid (0, 1, 2) and the hex history id is the id field
     + f'/?key={GALAXY_API_KEY}'
   )
-  data = session.get(url).json()
-  return data['deleted']
+  res = session.get(url)
+  if res.status_code == 200:
+    data = res.json()
+    return (data["deleted"], data["purged"])
+  else:
+    return (None, None)
 
 
 if __name__ == "__main__":
