@@ -756,7 +756,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
               num_restored += 1
               continue
 
-            if history.status != "Purged":
+            elif history.status != "Purged":
               num_threshold += 1
               rem_result = remove_history(history.id, purge=True)
               if rem_result:
