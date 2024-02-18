@@ -744,17 +744,23 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
         if deletion_notification.sent < warn_threshold:
           history = db_session.query(History).filter_by(id=history_notification.h_id).first()
           if history:
-            if not is_history_deleted(history):
+            try:
+              history_is_deleted = is_history_deleted(history)
+            except:
+              print(f"Error querying /api/<history_id> for history {history.id}. No action taken")
+              num_error += 1
+              history_is_deleted = None
+              continue
+
+            if not history_is_deleted:
               # User has restored history
               history.status = "Restored"
               db_session.add(history)
               db_session.commit()
               num_restored += 1
-              continue
 
             if history.status == "Restored":
               num_restored += 1
-              continue
 
             elif history.status != "Purged":
               num_threshold += 1
@@ -804,7 +810,7 @@ def is_history_deleted(history):
   url = (
     GALAXY_BASEURL
     + config.GALAXY_HISTORIES_EP
-    + '/' + history.hid
+    + '/' + history.id  # history_table is indexed by field hid (0, 1, 2) and the hex history id is the id field
     + f'/?key={GALAXY_API_KEY}'
   )
   data = session.get(url).json()
