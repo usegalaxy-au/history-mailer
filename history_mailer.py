@@ -768,6 +768,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
                   db_session.add(history)
                   db_session.commit()
                 num_previous += 1
+                print(f"History {history.id} is already in purged state")
                 continue
               num_threshold += 1
               elif not dryrun:
