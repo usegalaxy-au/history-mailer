@@ -1,2 +1,4 @@
 config.py
+prod_hm.sqlite
+staging_hm.sqlite
 venv/
