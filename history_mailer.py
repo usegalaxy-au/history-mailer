@@ -752,11 +752,11 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
 
             if history_is_deleted is False:
               # User has restored history
-              history.status = "Restored"
               if not dryrun:
+                history.status = "Restored"
                 db_session.add(history)
                 db_session.commit()
-                num_restored += 1
+              num_restored += 1
               print(f"History {history.id} is no longer in deleted state")
 
             elif history.status != "Purged":
