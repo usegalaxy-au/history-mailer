@@ -759,6 +759,8 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
 
             elif history.status != "Purged":
               if history_is_purged:
+                # User has purged history, or history has taken a long time to purge in a previous week,
+                # resulting in 504 status from delete request
                 history.status = "Purged"
                 db_session.add(history)
                 db_session.commit()
