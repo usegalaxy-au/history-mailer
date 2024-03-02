@@ -752,31 +752,41 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
 
             if history_is_deleted is False:
               # User has restored history
-              history.status = "Restored"
-              db_session.add(history)
-              db_session.commit()
+              if not dryrun:
+                history.status = "Restored"
+                db_session.add(history)
+                db_session.commit()
               num_restored += 1
+              print(f"History {history.id} is no longer in deleted state")
 
             elif history.status != "Purged":
+              num_threshold += 1
               if history_is_purged:
                 # User has purged history, or history has taken a long time to purge in a previous week,
                 # resulting in 504 status from delete request
-                history.status = "Purged"
-                db_session.add(history)
-                db_session.commit()
+                if not dryrun:
+                  history.status = "Purged"
+                  db_session.add(history)
+                  db_session.commit()
                 num_previous += 1
+                print(f"History {history.id} is already in purged state")
                 continue
-              num_threshold += 1
-              rem_result = remove_history(history.id, purge=True)
-              if rem_result:
+              elif not dryrun:
+                rem_result = remove_history(history.id, purge=True)
+                if rem_result:
+                  num_purged += 1
+                  hist_size += history.size
+                  history.status = "Purged"
+                  db_session.add(history)
+                  db_session.commit()
+                  print(f"Purged history: {history.id}")
+                else:
+                  num_error += 1
+                  print(f"Unable to purge history: {history.id}")
+              if dryrun:  # dryrun option set: nothing is removed, assume everything would return 200
+                print(f"Dry run. Would purge history: {history.id}")
                 num_purged += 1
                 hist_size += history.size
-                history.status = "Purged"
-                db_session.add(history)
-                db_session.commit()
-              else:
-                num_error += 1
-                print(f"Unable to purge history: {history.id}")
             else:
               num_previous += 1
 
