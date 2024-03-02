@@ -760,6 +760,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
               print(f"History {history.id} is no longer in deleted state")
 
             elif history.status != "Purged":
+              num_threshold += 1
               if history_is_purged:
                 # User has purged history, or history has taken a long time to purge in a previous week,
                 # resulting in 504 status from delete request
@@ -770,7 +771,6 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
                 num_previous += 1
                 print(f"History {history.id} is already in purged state")
                 continue
-              num_threshold += 1
               elif not dryrun:
                 rem_result = remove_history(history.id, purge=True)
                 if rem_result:
@@ -783,7 +783,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
                 else:
                   num_error += 1
                   print(f"Unable to purge history: {history.id}")
-              elif dryrun:  # dryrun option set: nothing is removed, assume everything would return 200
+              if dryrun:  # dryrun option set: nothing is removed, assume everything would return 200
                 print(f"Dry run. Would purge history: {history.id}")
                 num_purged += 1
                 hist_size += history.size
