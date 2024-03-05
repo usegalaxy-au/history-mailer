@@ -756,6 +756,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
               db_session.add(history)
               db_session.commit()
               num_restored += 1
+              continue
 
             elif history.status != "Purged":
               if history_is_purged:
