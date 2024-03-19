@@ -743,7 +743,7 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
         num_deleted += 1
         if deletion_notification.sent < warn_threshold:
           history = db_session.query(History).filter_by(id=history_notification.h_id).first()
-          if history:
+          if history and history.status != "Purged":
             history_is_deleted, history_is_purged = is_history_deleted_or_purged(history)
             if history_is_deleted is None:
               print(f"Error querying /api/<history_id> for history {history.id}. No action taken")
@@ -758,28 +758,27 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
               num_restored += 1
               continue
 
-            elif history.status != "Purged":
-              if history_is_purged:
-                # User has purged history, or history has taken a long time to purge in a previous week,
-                # resulting in 504 status from delete request
-                history.status = "Purged"
-                db_session.add(history)
-                db_session.commit()
-                num_previous += 1
-                continue
-              num_threshold += 1
-              rem_result = remove_history(history.id, purge=True)
-              if rem_result:
-                num_purged += 1
-                hist_size += history.size
-                history.status = "Purged"
-                db_session.add(history)
-                db_session.commit()
-              else:
-                num_error += 1
-                print(f"Unable to purge history: {history.id}")
-            else:
+            if history_is_purged:
+              # User has purged history, or history has taken a long time to purge in a previous week,
+              # resulting in 504 status from delete request
+              history.status = "Purged"
+              db_session.add(history)
+              db_session.commit()
               num_previous += 1
+              continue
+
+            # If history is neither active or already purged, purge history
+            num_threshold += 1
+            rem_result = remove_history(history.id, purge=True)
+            if rem_result:
+              num_purged += 1
+              hist_size += history.size
+              history.status = "Purged"
+              db_session.add(history)
+              db_session.commit()
+            else:
+              num_error += 1
+              print(f"Unable to purge history: {history.id}")
 
     db_session.close()
     msgs.append(f"Deleted histories: {num_deleted}")
