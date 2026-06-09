@@ -705,6 +705,11 @@ def test_send_email():
   print('Running test send email')
   from test_data import histories
 
+  # add history vars for template
+  for h in histories:
+    h['h_update_time'] = str(h['update_time'].strftime('%Y-%m-%d'))
+    h['h_size'] = sizeof_fmt(h['size'])
+
   warn_weeks = int(int(config.HISTORIES_WARN_DAYS) / 7)
   delete_weeks = int(int(config.HISTORIES_DELETE_DAYS) / 7)
   test_user = config.MAIL_TEST_USER
