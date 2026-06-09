@@ -27,6 +27,13 @@ argparser.add_argument('--production', action='store_const',const=True, default=
 argparser.add_argument('--notify', action='store_const',const=True, default=False, help="Post results to Slack")
 argparser.add_argument('--drop_db', action='store_const',const=True, default=False, help="Drop associated database. Does not do processing.")
 argparser.add_argument('--purge', action='store_const',const=True, default=False, help="Purges previously deleted histories.")
+argparser.add_argument(
+  '--test_email',
+  action='store_const',
+  const=True,
+  default=False,
+  help='Send fake warning email to test user and exit.',
+)
 
 
 def notify_slack(title, msg, colour):
@@ -180,7 +187,6 @@ def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address
     return False
 
   headers = {}
-  headers['X-Server-API-Key'] = config.MAIL_API
   headers['Content-type'] = 'application/json'
 
   payload = {}
@@ -188,20 +194,31 @@ def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address
     payload['to'] = to
   else:
     payload['to'] = ['ga_au_mailer_dev@maildrop.cc']
+  payload['api_key'] = config.MAIL_API
   payload['html_body'] = html
-  payload['from'] = from_address
+  payload['sender'] = from_address
   payload['subject'] = subject
   payload['reply_to'] = replyto
 
   postURL = config.MAIL_BASEURL + config.MAIL_SENDMESSAGE
   res = session.post(postURL, headers=headers, data=json.dumps(payload))
 
+  # shape of successful response from smtp2go v3 API is
+  # {'request_id': 'cabe927a-c7e8-4af3-82c0-e39b86f5d918',
+  #  'data': {
+  #   'succeeded': 1,
+  #   'failed': 0,
+  #   'failures': [], 
+  #   'email_id': '1wUfod-4o5NDgrty1w-pLtI'
+  # }}
+
   if res.status_code != 200:
     ret = {}
     ret['status'] = ','.join([str(res.status_code), res.reason, res.text])
-    return ret
-
-  return res.json()
+  else:
+    ret = res.json()
+    ret['status'] = 'success' if ret.get('data', {}).get('succeeded') == 1 else 'error'
+  return ret
 
 def remove_history(history, purge=False):
   global GALAXY_BASEURL; global GALAXY_API_KEY
@@ -432,9 +449,9 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
       notification.sent = datetime.now()
       notification.status = msg_results['status']
       if notification.status == "success":
-        notification.message_id = msg_results['data']['message_id']
+        notification.message_id = msg_results['data']['email_id']
         message = Message()
-        message.message_id = msg_results['data']['message_id']
+        message.message_id = msg_results['data']['email_id']
         message.status = "Accepted"
         db_session.add(message)
         notification.message = message
@@ -590,9 +607,9 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
         notification.sent = datetime.now()
         notification.status = msg_results['status']
         if notification.status == "success":
-          notification.message_id = msg_results['data']['message_id']
+          notification.message_id = msg_results['data']['email_id']
           message = Message()
-          message.message_id = msg_results['data']['message_id']
+          message.message_id = msg_results['data']['email_id']
           message.status = "Accepted"
           db_session.add(message)
           notification.message = message
@@ -684,7 +701,31 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
 
   return [warn_users, bad_users, delete_users, bad_delete_users], msgs
 
-def main(dryrun=True, production=False, do_delete=False, force=False, notify=False, drop_db=False, purge=False):
+def test_send_email():
+  print('Running test send email')
+  from test_data import histories
+
+  warn_weeks = int(int(config.HISTORIES_WARN_DAYS) / 7)
+  delete_weeks = int(int(config.HISTORIES_DELETE_DAYS) / 7)
+  test_user = config.MAIL_TEST_USER
+  template = Template(open('templates/email_warning.html').read())
+  html = template.render(
+    username=test_user['username'],
+    histories=histories,
+    warn_weeks=warn_weeks,
+    delete_weeks=delete_weeks,
+    warn_period=str(config.EMAIL_DAYS_THRESHOLD),
+    hist_view_base=GALAXY_HIST_VIEW_BASE,
+  )
+  msg_results = send_email(
+    to=test_user['email'],
+    html=html,
+    subject=config.MAIL_SUBJECT_WARNING,
+    production=True,
+  )
+  print(msg_results)
+
+def main(dryrun=True, production=False, do_delete=False, force=False, notify=False, drop_db=False, purge=False, test_email=False):
   global GALAXY_BASEURL
   global GALAXY_API_KEY
   global GALAXY_HIST_VIEW_BASE
@@ -709,6 +750,11 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
 
   engine = create_engine(db_uri)
   Session = sessionmaker(bind=engine)
+
+  if test_email:
+    # this trumps all other settings, results in test_email sent and nothing else
+    test_send_email()
+    sys.exit(0)
 
   if drop_db:
     Base.metadata.drop_all(engine)
@@ -829,7 +875,7 @@ if __name__ == "__main__":
   args = argparser.parse_args()
   if not args.production and not config.STAGING_GALAXY_BASEURL:
     print("No staging URL set. Run with --production flag to use production configuration.")
-  elif args.dryrun or args.warn or args.delete or args.drop_db or args.purge:
-    main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge)
+  elif args.dryrun or args.warn or args.delete or args.drop_db or args.purge or args.test_email:
+    main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge, test_email=args.test_email)
   else:
     print("No run type selected. Quiting without any work. Run with '--help' for usage.")

@@ -30,6 +30,7 @@ MAIL_SUBJECT_WARNING="Galaxy: Upcoming Deletion Notification"
 MAIL_SUBJECT_DELETION="Galaxy: Deletion Notification"
 MAIL_TEMPLATE_WARNING="templates/email_warning.html"
 MAIL_TEMPLATE_DELETION="templates/email_deletion.html"
+MAIL_TEST_USER={"username": "kucing123", "email": "kucing@email.edu.au"}
 
 # Slack settings
 SLACK_TOKEN=""
