@@ -713,7 +713,8 @@ def test_send_email():
   warn_weeks = int(int(config.HISTORIES_WARN_DAYS) / 7)
   delete_weeks = int(int(config.HISTORIES_DELETE_DAYS) / 7)
   test_user = config.MAIL_TEST_USER
-  template = Template(open('templates/email_warning.html').read())
+  template_file = config.MAIL_TEMPLATE_WARNING
+  template = Template(open(template_file).read())
   html = template.render(
     username=test_user['username'],
     histories=histories,
