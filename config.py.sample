@@ -1,6 +1,6 @@
 HISTORIES_WARN_DAYS=365
-HISTORIES_DELETE_DAYS=385
-EMAIL_DAYS_THRESHOLD=6
+HISTORIES_DELETE_DAYS=379
+EMAIL_DAYS_THRESHOLD=14
 PURGE_DAYS_THRESHOLD=6
 
 STAGING_GALAXY_API_KEY=""
@@ -20,11 +20,11 @@ GALAXY_GROUP_EP="groups/"
 GALAXY_GROUP_USER_EP="/users"
 GALAXY_KEEPLIST_GROUP="History Retention Keeplist"
 
-# Postal settings
+# Mail API settings
 MAIL_API=""
 MAIL_FROM=""  # "Galaxy <no-reply@my-galaxy-url>"
 MAIL_REPLYTO=""
-MAIL_BASEURL=""  # "https://postalserver.my-galaxy-url/api/v1/"
+MAIL_BASEURL=""  # "https://mailserver.my-galaxy-url/api/v1/"
 MAIL_SENDMESSAGE="email/send"
 MAIL_SUBJECT_WARNING="Galaxy: Upcoming Deletion Notification"
 MAIL_SUBJECT_DELETION="Galaxy: Deletion Notification"

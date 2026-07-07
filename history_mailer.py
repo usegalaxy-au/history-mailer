@@ -457,7 +457,7 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
         notification.message = message
         emailed_users += 1
       else:
-        print("ERROR: Postal did not return as success:", msg_results)
+        print("ERROR: Mail API did not return as success:", msg_results)
         error_users += 1
 
     except:
@@ -615,7 +615,7 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
           notification.message = message
           emailed_users += 1
         else:
-          print("ERROR: Postal did not return as success:", msg_results)
+          print("ERROR: Mail API did not return as success:", msg_results)
           error_users += 1
 
       except:
@@ -854,10 +854,10 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
       notify_slack("Finished Galaxy History Mailer", '\n'.join(msgs), 'good')
     return result
   else:
-    msg = "Unable to fetch histories. Quiting without any work."
+    msg = "Unable to fetch histories. Quitting without any work."
     print(msg)
     if notify:
-      notify_slack("Error - Galaxy Histroy Mailer", msg, 'danger')
+      notify_slack("Error - Galaxy History Mailer", msg, 'danger')
     return None
 
 
@@ -884,4 +884,4 @@ if __name__ == "__main__":
   elif args.dryrun or args.warn or args.delete or args.drop_db or args.purge or args.test_email:
     main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge, test_email=args.test_email)
   else:
-    print("No run type selected. Quiting without any work. Run with '--help' for usage.")
+    print("No run type selected. Quitting without any work. Run with '--help' for usage.")
