@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-import json, requests, argparse, sys, slack
+import json, requests, argparse, sys, slack, smtplib
 from collections import namedtuple
 import config
 from time import time, sleep
 from datetime import datetime, timedelta
 from dateutil import parser
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from jinja2 import Template
 from models import Base, History, User, Notification, Message, HistoryNotification
 from sqlalchemy import create_engine
@@ -177,23 +179,12 @@ def add_user_groups(users):
   print(str(len(groups)) + " groups queried. Total query time: " + str(timedelta(seconds=time()-start)))
   return
 
-def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address=config.MAIL_FROM, replyto=config.MAIL_REPLYTO, production=False):
-  if len(to) == 0:
-    print("ERROR: No to address specified; aborting email send")
-    return False
-
-  if html == "":
-    print("ERROR: No html body specified; aborting email send")
-    return False
-
+def _send_email_smtp2go(to, html, subject, from_address, replyto):
   headers = {}
   headers['Content-type'] = 'application/json'
 
   payload = {}
-  if production:
-    payload['to'] = to
-  else:
-    payload['to'] = ['ga_au_mailer_dev@maildrop.cc']
+  payload['to'] = to
   payload['api_key'] = config.MAIL_API
   payload['html_body'] = html
   payload['sender'] = from_address
@@ -208,7 +199,7 @@ def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address
   #  'data': {
   #   'succeeded': 1,
   #   'failed': 0,
-  #   'failures': [], 
+  #   'failures': [],
   #   'email_id': '1wUfod-4o5NDgrty1w-pLtI'
   # }}
 
@@ -219,6 +210,58 @@ def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address
     ret = res.json()
     ret['status'] = 'success' if ret.get('data', {}).get('succeeded') == 1 else 'error'
   return ret
+
+
+def _send_email_smtp(to, html, subject, from_address, replyto):
+  msg = MIMEMultipart('alternative')
+  msg['Subject'] = subject
+  msg['From'] = from_address
+  msg['To'] = ', '.join(to)
+  msg['Reply-To'] = replyto
+  msg.attach(MIMEText(html, 'html'))
+
+  try:
+    with smtplib.SMTP_SSL(config.SMTP_SERVER, config.SMTP_PORT) as server:
+      server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+      server.sendmail(from_address, to, msg.as_string())
+  except Exception as exc:
+    return {'status': str(exc)}
+
+  return {'status': 'success'}
+
+
+# MAIL_BACKEND selects which of the above does the actual sending. Defaults to
+# smtp2go via getattr so existing config.py files without MAIL_BACKEND set keep
+# working unchanged.
+MAIL_BACKENDS = {
+  'smtp2go': _send_email_smtp2go,
+  'smtp': _send_email_smtp,
+}
+
+
+def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address=config.MAIL_FROM, replyto=config.MAIL_REPLYTO, production=False):
+  # test_send_email() passes a bare string here; normalize so both backends can
+  # rely on `to` always being a list.
+  if isinstance(to, str):
+    to = [to]
+
+  if len(to) == 0:
+    print("ERROR: No to address specified; aborting email send")
+    return False
+
+  if html == "":
+    print("ERROR: No html body specified; aborting email send")
+    return False
+
+  actual_to = to if production else ['ga_au_mailer_dev@maildrop.cc']
+
+  backend_name = getattr(config, 'MAIL_BACKEND', 'smtp2go')
+  backend = MAIL_BACKENDS.get(backend_name)
+  if backend is None:
+    print(f"ERROR: Unknown MAIL_BACKEND '{backend_name}'; aborting email send")
+    return False
+
+  return backend(actual_to, html, subject, from_address, replyto)
 
 def remove_history(history, purge=False):
   global GALAXY_BASEURL; global GALAXY_API_KEY
