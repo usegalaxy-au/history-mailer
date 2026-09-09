@@ -20,12 +20,25 @@ GALAXY_GROUP_EP="groups/"
 GALAXY_GROUP_USER_EP="/users"
 GALAXY_KEEPLIST_GROUP="History Retention Keeplist"
 
-# Mail API settings
+# Mail backend: "smtp2go" (default, uses MAIL_API/MAIL_BASEURL below) or "smtp"
+# (plain SMTP via smtplib, uses SMTP_SERVER/SMTP_PORT/SMTP_USERNAME/SMTP_PASSWORD
+# below instead). Omit this setting entirely to keep the previous smtp2go-only
+# behavior - it defaults to "smtp2go" if unset.
+MAIL_BACKEND="smtp2go"
+
+# Mail API settings (MAIL_BACKEND="smtp2go")
 MAIL_API=""
-MAIL_FROM=""  # "Galaxy <no-reply@my-galaxy-url>"
-MAIL_REPLYTO=""
 MAIL_BASEURL=""  # "https://mailserver.my-galaxy-url/api/v1/"
 MAIL_SENDMESSAGE="email/send"
+
+# Plain SMTP settings (MAIL_BACKEND="smtp")
+SMTP_SERVER=""  # "smtp.my-mail-provider.org"
+SMTP_PORT=465
+SMTP_USERNAME=""
+SMTP_PASSWORD=""
+
+MAIL_FROM=""  # "Galaxy <no-reply@my-galaxy-url>"
+MAIL_REPLYTO=""
 MAIL_SUBJECT_WARNING="Galaxy: Upcoming Deletion Notification"
 MAIL_SUBJECT_DELETION="Galaxy: Deletion Notification"
 MAIL_TEMPLATE_WARNING="templates/email_warning.html"
