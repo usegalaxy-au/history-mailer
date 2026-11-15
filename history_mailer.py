@@ -9,9 +9,48 @@ from jinja2 import Template
 from models import Base, History, User, Notification, Message, HistoryNotification
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
+
+HTTP_RETRIES = 5
+HTTP_BACKOFF_FACTOR = 2  # seconds; sleeps grow exponentially between retries
+HTTP_TIMEOUT = 120  # seconds
+HTTP_RETRY_STATUS_CODES = (502, 503, 504)
+
+
+class TimeoutHTTPAdapter(HTTPAdapter):
+  """HTTPAdapter which applies a default timeout to every request."""
+
+  def send(self, *args, **kwargs):
+    if kwargs.get('timeout') is None:
+      kwargs['timeout'] = HTTP_TIMEOUT
+    return super().send(*args, **kwargs)
+
+
+def build_session():
+  """Build a requests session which retries idempotent GET requests.
+
+  Only GET is retried: retrying POST (email send) could duplicate emails,
+  and DELETE (history purge) may time out while still succeeding.
+  """
+  retry = Retry(
+    total=HTTP_RETRIES,
+    connect=HTTP_RETRIES,
+    read=HTTP_RETRIES,
+    backoff_factor=HTTP_BACKOFF_FACTOR,
+    status_forcelist=HTTP_RETRY_STATUS_CODES,
+    allowed_methods={'GET'},
+    raise_on_status=False,
+  )
+  adapter = TimeoutHTTPAdapter(max_retries=retry)
+  s = requests.Session()
+  s.mount('http://', adapter)
+  s.mount('https://', adapter)
+  return s
+
 
 Session = None
-session = requests.Session()
+session = build_session()
 GALAXY_BASEURL: str
 GALAXY_API_KEY: str
 GALAXY_HIST_VIEW_BASE: str
