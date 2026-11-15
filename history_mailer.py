@@ -16,6 +16,11 @@ HTTP_RETRIES = 5
 HTTP_BACKOFF_FACTOR = 2  # seconds; sleeps grow exponentially between retries
 HTTP_TIMEOUT = 120  # seconds
 HTTP_RETRY_STATUS_CODES = (502, 503, 504)
+ERROR_MSG_PREFIX = "ERROR: "
+
+
+class GalaxyAPIError(Exception):
+  """Raised when the Galaxy API returns unusable data."""
 
 
 class TimeoutHTTPAdapter(HTTPAdapter):
@@ -187,8 +192,8 @@ def add_user_groups(users):
   res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
 
   if res.status_code != 200:
-    print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
-    return False
+    raise GalaxyAPIError(
+      "Unable to list groups: " + str(res.status_code) + ' ' + res.reason)
 
   groups = res.json()
   group_i = 0
@@ -201,8 +206,9 @@ def add_user_groups(users):
     res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
 
     if res.status_code != 200:
-      print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
-      return False
+      raise GalaxyAPIError(
+        "Unable to list users of group " + group['name'] + ": "
+        + str(res.status_code) + ' ' + res.reason)
 
     group_users = res.json()
 
@@ -402,7 +408,13 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
   msgs.append(msg)
   print(msg)
 
-  warn_users, bad_users = get_users_details(user_ids, warn_histories)
+  try:
+    warn_users, bad_users = get_users_details(user_ids, warn_histories)
+  except (GalaxyAPIError, requests.exceptions.RequestException) as e:
+    msg = f"{ERROR_MSG_PREFIX}Warning phase skipped: unable to fetch user/group info: {e}"
+    msgs.append(msg)
+    print(msg)
+    warn_users, bad_users = {}, {}
 
   if len(bad_users) > 0:
     msg = str(len(bad_users)) + " warnable users without details. Skipping."
@@ -572,7 +584,15 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
         msgs.append(msg)
         print(msg)
 
-    delete_users, bad_delete_users = get_users_details(delete_user_ids, delete_histories)
+    try:
+      delete_users, bad_delete_users = get_users_details(delete_user_ids, delete_histories)
+    except (GalaxyAPIError, requests.exceptions.RequestException) as e:
+      # Without group data keeplisted users cannot be identified, so never delete.
+      msg = f"{ERROR_MSG_PREFIX}Deletion phase aborted: unable to fetch user/group info: {e}"
+      msgs.append(msg)
+      print(msg)
+      db_session.close()
+      return [warn_users, bad_users, {}, {}], msgs
 
     if len(bad_delete_users) > 0:
       msg = str(len(bad_delete_users)) + " delete eligible users without details. Skipping."
@@ -890,7 +910,12 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
   if histories:
     result, msgs = run(histories, dryrun=dryrun, do_delete=do_delete, force=force, production=production)
     if notify:
-      notify_slack("Finished Galaxy History Mailer", '\n'.join(msgs), 'good')
+      failed = any(m.startswith(ERROR_MSG_PREFIX) for m in msgs)
+      notify_slack(
+        "Error - Galaxy History Mailer" if failed else "Finished Galaxy History Mailer",
+        '\n'.join(msgs),
+        'danger' if failed else 'good',
+      )
     return result
   else:
     msg = "Unable to fetch histories. Quitting without any work."
