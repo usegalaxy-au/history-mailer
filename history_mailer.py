@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, requests, argparse, sys, slack
+import json, requests, argparse, sys, slack, traceback
 from collections import namedtuple
 import config
 from time import time, sleep
@@ -946,6 +946,17 @@ if __name__ == "__main__":
   if not args.production and not config.STAGING_GALAXY_BASEURL:
     print("No staging URL set. Run with --production flag to use production configuration.")
   elif args.dryrun or args.warn or args.delete or args.drop_db or args.purge or args.test_email:
-    main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge, test_email=args.test_email)
+    try:
+      main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge, test_email=args.test_email)
+    except Exception:
+      # Report unhandled failures to Slack, then re-raise so cron sees a non-zero exit.
+      tb = traceback.format_exc()
+      print(tb)
+      if args.notify:
+        try:
+          notify_slack("Error - Galaxy History Mailer", "Unhandled exception:\n" + tb, 'danger')
+        except Exception:
+          print("ERROR: Unable to post failure to Slack")
+      raise
   else:
     print("No run type selected. Quitting without any work. Run with '--help' for usage.")
