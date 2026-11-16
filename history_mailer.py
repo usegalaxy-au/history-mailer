@@ -270,7 +270,13 @@ def remove_history(history, purge=False):
 
   apiURL = GALAXY_BASEURL + config.GALAXY_HISTORIES_EP +  "/" + history
   queryURL = apiURL+'?purge=' + str(purge)
-  res=galaxy_session.delete(queryURL)
+  try:
+    res=galaxy_session.delete(queryURL)
+  except requests.exceptions.RequestException as e:
+    # e.g. timeout on a slow delete/purge. Report as failed rather than
+    # crashing the whole run part-way through.
+    print(f"ERROR: Request to remove history {history} failed: {e}")
+    return False
   return res.status_code == 200
 
 def get_users_details(user_ids, histories):
