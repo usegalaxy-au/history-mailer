@@ -14,24 +14,14 @@ from urllib3.util import Retry
 
 HTTP_RETRIES = 5
 HTTP_BACKOFF_FACTOR = 2  # seconds; sleeps grow exponentially between retries
-HTTP_TIMEOUT = 120  # seconds
 HTTP_RETRY_STATUS_CODES = (502, 503, 504)
-
-
-class TimeoutHTTPAdapter(HTTPAdapter):
-  """HTTPAdapter which applies a default timeout to every request."""
-
-  def send(self, *args, **kwargs):
-    if kwargs.get('timeout') is None:
-      kwargs['timeout'] = HTTP_TIMEOUT
-    return super().send(*args, **kwargs)
 
 
 def build_session():
   """Build a requests session which retries idempotent GET requests.
 
   Only GET is retried: retrying POST (email send) could duplicate emails,
-  and DELETE (history purge) may time out while still succeeding.
+  and DELETE (history purge) may be slow while still succeeding.
   """
   retry = Retry(
     total=HTTP_RETRIES,
@@ -42,7 +32,7 @@ def build_session():
     allowed_methods={'GET'},
     raise_on_status=False,
   )
-  adapter = TimeoutHTTPAdapter(max_retries=retry)
+  adapter = HTTPAdapter(max_retries=retry)
   s = requests.Session()
   s.mount('http://', adapter)
   s.mount('https://', adapter)
