@@ -55,7 +55,10 @@ def build_session():
 
 
 Session = None
-session = build_session()
+session = build_session()  # for non-Galaxy services (mail API)
+# Galaxy session. The API key is set as a header in main() so that it never
+# appears in URLs, and therefore not in exception messages or logs.
+galaxy_session = build_session()
 GALAXY_BASEURL: str
 GALAXY_API_KEY: str
 GALAXY_HIST_VIEW_BASE: str
@@ -96,19 +99,18 @@ def notify_slack(title, msg, colour):
 
 def get_all_histories(warn_days, published="False",limit=100,keys=config.GALAXY_DEFAULT_KEYS):
   global GALAXY_BASEURL
-  global GALAXY_API_KEY
   print("Querying histories...")
   start=time()
   wt = datetime.now() - timedelta(days=warn_days)
   apiURL = GALAXY_BASEURL + config.GALAXY_HISTORIES_EP
-  queryURL = apiURL+'?all=true&key='+ GALAXY_API_KEY + '&q=purged&qv=False&q=published&qv=' + published + \
+  queryURL = apiURL+'?all=true&q=purged&qv=False&q=published&qv=' + published + \
     '&q=update_time-le&qv=' + str(wt.isoformat()) + '&keys=' + keys + '&limit=' + str(limit)
   ret = []
   queries_left=True
   offset=0
 
   while queries_left:
-    res=session.get(queryURL+ '&offset=' + str(offset))
+    res=galaxy_session.get(queryURL+ '&offset=' + str(offset))
 
     if res.status_code != 200:
       print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
@@ -170,10 +172,9 @@ def process_size(histories, label="delete eligible"):
 
 def get_user_details(user_id):
   global GALAXY_BASEURL
-  global GALAXY_API_KEY
   queryURL = GALAXY_BASEURL + config.GALAXY_USER_EP + '/' + user_id
 
-  res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
+  res=galaxy_session.get(queryURL)
 
   if res.status_code != 200:
     print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
@@ -186,10 +187,9 @@ def get_user_details(user_id):
 
 def add_user_groups(users):
   global GALAXY_BASEURL
-  global GALAXY_API_KEY
 
   queryURL = GALAXY_BASEURL + config.GALAXY_GROUP_EP
-  res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
+  res=galaxy_session.get(queryURL)
 
   if res.status_code != 200:
     raise GalaxyAPIError(
@@ -203,7 +203,7 @@ def add_user_groups(users):
     sys.stdout.write("Populating group: " + group['name'] + " (" + str(group_i) + "/" + str(len(groups)) + ")   \r")
     sys.stdout.flush()
     queryURL = GALAXY_BASEURL + config.GALAXY_GROUP_EP + group['id'] + config.GALAXY_GROUP_USER_EP
-    res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
+    res=galaxy_session.get(queryURL)
 
     if res.status_code != 200:
       raise GalaxyAPIError(
@@ -266,11 +266,11 @@ def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address
   return ret
 
 def remove_history(history, purge=False):
-  global GALAXY_BASEURL; global GALAXY_API_KEY
+  global GALAXY_BASEURL
 
   apiURL = GALAXY_BASEURL + config.GALAXY_HISTORIES_EP +  "/" + history
-  queryURL = apiURL+'?key='+ GALAXY_API_KEY + '&purge=' + str(purge)
-  res=session.delete(queryURL)
+  queryURL = apiURL+'?purge=' + str(purge)
+  res=galaxy_session.delete(queryURL)
   return res.status_code == 200
 
 def get_users_details(user_ids, histories):
@@ -813,6 +813,8 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
     GALAXY_HIST_VIEW_BASE = config.STAGING_HIST_VIEW_BASE
     db_uri = config.STAGING_LOCAL_DB
 
+  galaxy_session.headers['x-api-key'] = GALAXY_API_KEY
+
   engine = create_engine(db_uri)
   Session = sessionmaker(bind=engine)
 
@@ -931,9 +933,9 @@ def is_history_deleted_or_purged(history):
     GALAXY_BASEURL
     + config.GALAXY_HISTORIES_EP
     + '/' + history.id  # history_table is indexed by field hid (0, 1, 2) and the hex history id is the id field
-    + f'/?key={GALAXY_API_KEY}'
+    + '/'
   )
-  res = session.get(url)
+  res = galaxy_session.get(url)
   if res.status_code == 200:
     data = res.json()
     return (data["deleted"], data["purged"])
