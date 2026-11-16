@@ -15,11 +15,23 @@ from urllib3.util import Retry
 HTTP_RETRIES = 5
 HTTP_BACKOFF_FACTOR = 2  # seconds; sleeps grow exponentially between retries
 HTTP_RETRY_STATUS_CODES = (502, 503, 504)
+# Max seconds without a response on connect/read (not total request time).
+# Initial estimate; tune after a production run, especially for purges.
+HTTP_TIMEOUT = 120
 ERROR_MSG_PREFIX = "ERROR: "
 
 
 class GalaxyAPIError(Exception):
   """Raised when the Galaxy API returns unusable data."""
+
+
+class TimeoutHTTPAdapter(HTTPAdapter):
+  """HTTPAdapter which applies a default timeout to every request."""
+
+  def send(self, *args, **kwargs):
+    if kwargs.get('timeout') is None:
+      kwargs['timeout'] = HTTP_TIMEOUT
+    return super().send(*args, **kwargs)
 
 
 def build_session():
@@ -37,7 +49,7 @@ def build_session():
     allowed_methods={'GET'},
     raise_on_status=False,
   )
-  adapter = HTTPAdapter(max_retries=retry)
+  adapter = TimeoutHTTPAdapter(max_retries=retry)
   s = requests.Session()
   s.mount('http://', adapter)
   s.mount('https://', adapter)
