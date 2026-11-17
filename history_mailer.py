@@ -27,6 +27,9 @@ def build_session():
     total=HTTP_RETRIES,
     connect=HTTP_RETRIES,
     read=HTTP_RETRIES,
+    # Errors not classed as connect/read (e.g. TLS errors) bypass
+    # allowed_methods, so would retry POST/DELETE after they were sent.
+    other=0,
     backoff_factor=HTTP_BACKOFF_FACTOR,
     status_forcelist=HTTP_RETRY_STATUS_CODES,
     allowed_methods={'GET'},
