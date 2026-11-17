@@ -9,9 +9,41 @@ from jinja2 import Template
 from models import Base, History, User, Notification, Message, HistoryNotification
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
+
+HTTP_RETRIES = 5
+HTTP_BACKOFF_FACTOR = 2  # seconds; sleeps grow exponentially between retries
+HTTP_RETRY_STATUS_CODES = (502, 503, 504)
+
+
+def build_session():
+  """Build a requests session which retries idempotent GET requests.
+
+  Only GET is retried: retrying POST (email send) could duplicate emails,
+  and DELETE (history purge) may be slow while still succeeding.
+  """
+  retry = Retry(
+    total=HTTP_RETRIES,
+    connect=HTTP_RETRIES,
+    read=HTTP_RETRIES,
+    # Errors not classed as connect/read (e.g. TLS errors) bypass
+    # allowed_methods, so would retry POST/DELETE after they were sent.
+    other=0,
+    backoff_factor=HTTP_BACKOFF_FACTOR,
+    status_forcelist=HTTP_RETRY_STATUS_CODES,
+    allowed_methods={'GET'},
+    raise_on_status=False,
+  )
+  adapter = HTTPAdapter(max_retries=retry)
+  s = requests.Session()
+  s.mount('http://', adapter)
+  s.mount('https://', adapter)
+  return s
+
 
 Session = None
-session = requests.Session()
+session = build_session()
 GALAXY_BASEURL: str
 GALAXY_API_KEY: str
 GALAXY_HIST_VIEW_BASE: str
