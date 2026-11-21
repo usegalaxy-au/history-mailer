@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, requests, argparse, sys, slack
+import json, requests, argparse, sys, slack, traceback
 from collections import namedtuple
 import config
 from time import time, sleep
@@ -15,6 +15,23 @@ from urllib3.util import Retry
 HTTP_RETRIES = 5
 HTTP_BACKOFF_FACTOR = 2  # seconds; sleeps grow exponentially between retries
 HTTP_RETRY_STATUS_CODES = (502, 503, 504)
+# Max seconds without a response on connect/read (not total request time).
+# Initial estimate; tune after a production run, especially for purges.
+HTTP_TIMEOUT = 120
+ERROR_MSG_PREFIX = "ERROR: "
+
+
+class GalaxyAPIError(Exception):
+  """Raised when the Galaxy API returns unusable data."""
+
+
+class TimeoutHTTPAdapter(HTTPAdapter):
+  """HTTPAdapter which applies a default timeout to every request."""
+
+  def send(self, *args, **kwargs):
+    if kwargs.get('timeout') is None:
+      kwargs['timeout'] = HTTP_TIMEOUT
+    return super().send(*args, **kwargs)
 
 
 def build_session():
@@ -35,7 +52,7 @@ def build_session():
     allowed_methods={'GET'},
     raise_on_status=False,
   )
-  adapter = HTTPAdapter(max_retries=retry)
+  adapter = TimeoutHTTPAdapter(max_retries=retry)
   s = requests.Session()
   s.mount('http://', adapter)
   s.mount('https://', adapter)
@@ -43,7 +60,10 @@ def build_session():
 
 
 Session = None
-session = build_session()
+session = build_session()  # for non-Galaxy services (mail API)
+# Galaxy session. The API key is set as a header in main() so that it never
+# appears in URLs, and therefore not in exception messages or logs.
+galaxy_session = build_session()
 GALAXY_BASEURL: str
 GALAXY_API_KEY: str
 GALAXY_HIST_VIEW_BASE: str
@@ -84,19 +104,18 @@ def notify_slack(title, msg, colour):
 
 def get_all_histories(warn_days, published="False",limit=100,keys=config.GALAXY_DEFAULT_KEYS):
   global GALAXY_BASEURL
-  global GALAXY_API_KEY
   print("Querying histories...")
   start=time()
   wt = datetime.now() - timedelta(days=warn_days)
   apiURL = GALAXY_BASEURL + config.GALAXY_HISTORIES_EP
-  queryURL = apiURL+'?all=true&key='+ GALAXY_API_KEY + '&q=purged&qv=False&q=published&qv=' + published + \
+  queryURL = apiURL+'?all=true&q=purged&qv=False&q=published&qv=' + published + \
     '&q=update_time-le&qv=' + str(wt.isoformat()) + '&keys=' + keys + '&limit=' + str(limit)
   ret = []
   queries_left=True
   offset=0
 
   while queries_left:
-    res=session.get(queryURL+ '&offset=' + str(offset))
+    res=galaxy_session.get(queryURL+ '&offset=' + str(offset))
 
     if res.status_code != 200:
       print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
@@ -158,10 +177,9 @@ def process_size(histories, label="delete eligible"):
 
 def get_user_details(user_id):
   global GALAXY_BASEURL
-  global GALAXY_API_KEY
   queryURL = GALAXY_BASEURL + config.GALAXY_USER_EP + '/' + user_id
 
-  res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
+  res=galaxy_session.get(queryURL)
 
   if res.status_code != 200:
     print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
@@ -174,14 +192,13 @@ def get_user_details(user_id):
 
 def add_user_groups(users):
   global GALAXY_BASEURL
-  global GALAXY_API_KEY
 
   queryURL = GALAXY_BASEURL + config.GALAXY_GROUP_EP
-  res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
+  res=galaxy_session.get(queryURL)
 
   if res.status_code != 200:
-    print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
-    return False
+    raise GalaxyAPIError(
+      "Unable to list groups: " + str(res.status_code) + ' ' + res.reason)
 
   groups = res.json()
   group_i = 0
@@ -191,11 +208,12 @@ def add_user_groups(users):
     sys.stdout.write("Populating group: " + group['name'] + " (" + str(group_i) + "/" + str(len(groups)) + ")   \r")
     sys.stdout.flush()
     queryURL = GALAXY_BASEURL + config.GALAXY_GROUP_EP + group['id'] + config.GALAXY_GROUP_USER_EP
-    res=session.get(queryURL+'?key='+ GALAXY_API_KEY)
+    res=galaxy_session.get(queryURL)
 
     if res.status_code != 200:
-      print("ERROR: Request did not return ok: " + res.reason + ': ' + res.text)
-      return False
+      raise GalaxyAPIError(
+        "Unable to list users of group " + group['name'] + ": "
+        + str(res.status_code) + ' ' + res.reason)
 
     group_users = res.json()
 
@@ -253,11 +271,17 @@ def send_email(to=[], html="", subject=config.MAIL_SUBJECT_WARNING, from_address
   return ret
 
 def remove_history(history, purge=False):
-  global GALAXY_BASEURL; global GALAXY_API_KEY
+  global GALAXY_BASEURL
 
   apiURL = GALAXY_BASEURL + config.GALAXY_HISTORIES_EP +  "/" + history
-  queryURL = apiURL+'?key='+ GALAXY_API_KEY + '&purge=' + str(purge)
-  res=session.delete(queryURL)
+  queryURL = apiURL+'?purge=' + str(purge)
+  try:
+    res=galaxy_session.delete(queryURL)
+  except requests.exceptions.RequestException as e:
+    # e.g. timeout on a slow delete/purge. Report as failed rather than
+    # crashing the whole run part-way through.
+    print(f"ERROR: Request to remove history {history} failed: {e}")
+    return False
   return res.status_code == 200
 
 def get_users_details(user_ids, histories):
@@ -395,7 +419,13 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
   msgs.append(msg)
   print(msg)
 
-  warn_users, bad_users = get_users_details(user_ids, warn_histories)
+  try:
+    warn_users, bad_users = get_users_details(user_ids, warn_histories)
+  except (GalaxyAPIError, requests.exceptions.RequestException) as e:
+    msg = f"{ERROR_MSG_PREFIX}Warning phase skipped: unable to fetch user/group info: {e}"
+    msgs.append(msg)
+    print(msg)
+    warn_users, bad_users = {}, {}
 
   if len(bad_users) > 0:
     msg = str(len(bad_users)) + " warnable users without details. Skipping."
@@ -565,7 +595,15 @@ def run(histories, dryrun=True, do_delete=False, force=False, production=False):
         msgs.append(msg)
         print(msg)
 
-    delete_users, bad_delete_users = get_users_details(delete_user_ids, delete_histories)
+    try:
+      delete_users, bad_delete_users = get_users_details(delete_user_ids, delete_histories)
+    except (GalaxyAPIError, requests.exceptions.RequestException) as e:
+      # Without group data keeplisted users cannot be identified, so never delete.
+      msg = f"{ERROR_MSG_PREFIX}Deletion phase aborted: unable to fetch user/group info: {e}"
+      msgs.append(msg)
+      print(msg)
+      db_session.close()
+      return [warn_users, bad_users, {}, {}], msgs
 
     if len(bad_delete_users) > 0:
       msg = str(len(bad_delete_users)) + " delete eligible users without details. Skipping."
@@ -786,6 +824,8 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
     GALAXY_HIST_VIEW_BASE = config.STAGING_HIST_VIEW_BASE
     db_uri = config.STAGING_LOCAL_DB
 
+  galaxy_session.headers['x-api-key'] = GALAXY_API_KEY
+
   engine = create_engine(db_uri)
   Session = sessionmaker(bind=engine)
 
@@ -883,7 +923,12 @@ def main(dryrun=True, production=False, do_delete=False, force=False, notify=Fal
   if histories:
     result, msgs = run(histories, dryrun=dryrun, do_delete=do_delete, force=force, production=production)
     if notify:
-      notify_slack("Finished Galaxy History Mailer", '\n'.join(msgs), 'good')
+      failed = any(m.startswith(ERROR_MSG_PREFIX) for m in msgs)
+      notify_slack(
+        "Error - Galaxy History Mailer" if failed else "Finished Galaxy History Mailer",
+        '\n'.join(msgs),
+        'danger' if failed else 'good',
+      )
     return result
   else:
     msg = "Unable to fetch histories. Quitting without any work."
@@ -899,9 +944,9 @@ def is_history_deleted_or_purged(history):
     GALAXY_BASEURL
     + config.GALAXY_HISTORIES_EP
     + '/' + history.id  # history_table is indexed by field hid (0, 1, 2) and the hex history id is the id field
-    + f'/?key={GALAXY_API_KEY}'
+    + '/'
   )
-  res = session.get(url)
+  res = galaxy_session.get(url)
   if res.status_code == 200:
     data = res.json()
     return (data["deleted"], data["purged"])
@@ -914,6 +959,17 @@ if __name__ == "__main__":
   if not args.production and not config.STAGING_GALAXY_BASEURL:
     print("No staging URL set. Run with --production flag to use production configuration.")
   elif args.dryrun or args.warn or args.delete or args.drop_db or args.purge or args.test_email:
-    main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge, test_email=args.test_email)
+    try:
+      main(dryrun=args.dryrun, production=args.production, do_delete=args.delete, force=args.force, notify=args.notify, drop_db=args.drop_db, purge=args.purge, test_email=args.test_email)
+    except Exception:
+      # Report unhandled failures to Slack, then re-raise so cron sees a non-zero exit.
+      tb = traceback.format_exc()
+      print(tb)
+      if args.notify:
+        try:
+          notify_slack("Error - Galaxy History Mailer", "Unhandled exception:\n" + tb, 'danger')
+        except Exception:
+          print("ERROR: Unable to post failure to Slack")
+      raise
   else:
     print("No run type selected. Quitting without any work. Run with '--help' for usage.")
